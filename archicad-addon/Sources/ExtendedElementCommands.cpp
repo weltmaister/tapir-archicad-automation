@@ -1047,6 +1047,17 @@ bool ApplyWallDetails (API_Element& element, API_Element& mask, const GS::Object
         ACAPI_ELEMENT_MASK_SET (mask, API_WallType, offset);
         changed = true;
     }
+    GS::UniString refLineLoc;
+    if (details.Get ("referenceLineLocation", refLineLoc)) {
+        if      (refLineLoc == "Outside")     element.wall.referenceLineLocation = APIWallRefLine_Outside;
+        else if (refLineLoc == "Center")      element.wall.referenceLineLocation = APIWallRefLine_Center;
+        else if (refLineLoc == "Inside")      element.wall.referenceLineLocation = APIWallRefLine_Inside;
+        else if (refLineLoc == "CoreOutside") element.wall.referenceLineLocation = APIWallRefLine_CoreOutside;
+        else if (refLineLoc == "CoreCenter")  element.wall.referenceLineLocation = APIWallRefLine_CoreCenter;
+        else if (refLineLoc == "CoreInside")  element.wall.referenceLineLocation = APIWallRefLine_CoreInside;
+        ACAPI_ELEMENT_MASK_SET (mask, API_WallType, referenceLineLocation);
+        changed = true;
+    }
     auto thickness = GetOptionalDouble (details, "thickness");
     if (thickness.HasValue ()) {
         element.wall.thickness = thickness.Get ();
@@ -1108,6 +1119,15 @@ bool ApplySlabDetails (API_Element& element, API_Element& mask, const GS::Object
     if (thickness.HasValue ()) {
         element.slab.thickness = thickness.Get ();
         ACAPI_ELEMENT_MASK_SET (mask, API_SlabType, thickness);
+        changed = true;
+    }
+    GS::UniString refPlaneLoc;
+    if (details.Get ("referencePlaneLocation", refPlaneLoc)) {
+        if      (refPlaneLoc == "Top")        element.slab.referencePlaneLocation = APISlabRefPlane_Top;
+        else if (refPlaneLoc == "CoreTop")    element.slab.referencePlaneLocation = APISlabRefPlane_CoreTop;
+        else if (refPlaneLoc == "CoreBottom") element.slab.referencePlaneLocation = APISlabRefPlane_CoreBottom;
+        else if (refPlaneLoc == "Bottom")     element.slab.referencePlaneLocation = APISlabRefPlane_Bottom;
+        ACAPI_ELEMENT_MASK_SET (mask, API_SlabType, referencePlaneLocation);
         changed = true;
     }
 
@@ -1205,6 +1225,15 @@ bool ApplyColumnDetails (API_Element& element, API_Element& mask, const GS::Obje
         ACAPI_ELEMENT_MASK_SET (mask, API_ColumnType, axisRotationAngle);
         changed = true;
     }
+    GS::UniString anchorStr;
+    if (details.Get ("coreAnchor", anchorStr)) {
+        auto anchor = ParseAnchorPoint (anchorStr);
+        if (anchor.HasValue ()) {
+            element.column.coreAnchor = anchor.Get ();
+            ACAPI_ELEMENT_MASK_SET (mask, API_ColumnType, coreAnchor);
+            changed = true;
+        }
+    }
     return changed;
 }
 
@@ -1252,6 +1281,15 @@ bool ApplyBeamDetails (API_Element& element, API_Element& mask, const GS::Object
         element.beam.verticalCurveHeight = curveHeight.Get ();
         ACAPI_ELEMENT_MASK_SET (mask, API_BeamType, verticalCurveHeight);
         changed = true;
+    }
+    GS::UniString anchorStr;
+    if (details.Get ("anchorPoint", anchorStr)) {
+        auto anchor = ParseAnchorPoint (anchorStr);
+        if (anchor.HasValue ()) {
+            element.beam.anchorPoint = anchor.Get ();
+            ACAPI_ELEMENT_MASK_SET (mask, API_BeamType, anchorPoint);
+            changed = true;
+        }
     }
     return changed;
 }
@@ -1348,6 +1386,18 @@ bool ApplyWindowOrDoorDetails (API_Element& element, API_Element& mask, const GS
         ACAPI_ELEMENT_MASK_SET (mask, API_WindowType, objLoc);
         changed = true;
     }
+    bool reflected = false;
+    if (details.Get ("reflected", reflected)) {
+        element.window.openingBase.reflected = reflected;
+        ACAPI_ELEMENT_MASK_SET (mask, API_WindowType, openingBase.reflected);
+        changed = true;
+    }
+    bool refside = false;
+    if (details.Get ("refSide", refside)) {
+        element.window.openingBase.refSide = refside;
+        ACAPI_ELEMENT_MASK_SET (mask, API_WindowType, openingBase.refSide);
+        changed = true;
+    }
     return changed;
 }
 
@@ -1374,6 +1424,10 @@ GS::Optional<GS::UniString> CreateWallsCommand::GetInputParametersSchema () cons
                         "height": { "type": "number", "exclusiveMinimum": 0.0 },
                         "thickness": { "type": "number", "exclusiveMinimum": 0.0 },
                         "offset": { "type": "number" },
+                        "referenceLineLocation": {
+                            "type": "string",
+                            "enum": ["Outside", "Center", "Inside", "CoreOutside", "CoreCenter", "CoreInside"]
+                        },
                         "structureType": {
                             "type": "string",
                             "enum": ["Basic", "Composite", "Profile"]
@@ -1410,6 +1464,14 @@ GS::Optional<GS::ObjectState> CreateWallsCommand::SetTypeSpecificParameters (API
     element.wall.height = height;
     element.wall.thickness = thickness;
     element.wall.referenceLineLocation = APIWallRefLine_Center;
+    GS::UniString refLineLoc;
+    if (parameters.Get ("referenceLineLocation", refLineLoc)) {
+        if      (refLineLoc == "Outside")     element.wall.referenceLineLocation = APIWallRefLine_Outside;
+        else if (refLineLoc == "Inside")      element.wall.referenceLineLocation = APIWallRefLine_Inside;
+        else if (refLineLoc == "CoreOutside") element.wall.referenceLineLocation = APIWallRefLine_CoreOutside;
+        else if (refLineLoc == "CoreCenter")  element.wall.referenceLineLocation = APIWallRefLine_CoreCenter;
+        else if (refLineLoc == "CoreInside")  element.wall.referenceLineLocation = APIWallRefLine_CoreInside;
+    }
     element.wall.modelElemStructureType = API_BasicStructure;
     element.wall.offset = 0.0;
 
@@ -1453,7 +1515,11 @@ GS::Optional<GS::UniString> CreateBeamsCommand::GetInputParametersSchema () cons
                         "offset": { "type": "number" },
                         "slantAngle": { "type": "number" },
                         "arcAngle": { "type": "number" },
-                        "verticalCurveHeight": { "type": "number" }
+                        "verticalCurveHeight": { "type": "number" },
+                        "anchorPoint": {
+                            "type": "string",
+                            "enum": ["TopLeft", "TopCenter", "TopRight", "MiddleLeft", "Center", "MiddleRight", "BottomLeft", "BottomCenter", "BottomRight"]
+                        }
                     },
                     "additionalProperties": false,
                     "required": ["begCoordinate", "endCoordinate", "zCoordinate"]
@@ -1493,6 +1559,13 @@ GS::Optional<GS::ObjectState> CreateBeamsCommand::SetTypeSpecificParameters (API
     if (curveHeight.HasValue ()) {
         element.beam.verticalCurveHeight = curveHeight.Get ();
     }
+    GS::UniString anchorStr;
+    if (parameters.Get ("anchorPoint", anchorStr)) {
+        auto anchor = ParseAnchorPoint (anchorStr);
+        if (anchor.HasValue ()) {
+            element.beam.anchorPoint = anchor.Get ();
+        }
+    }
 
     return {};
 }
@@ -1521,7 +1594,9 @@ GS::Optional<GS::UniString> CreateWindowsCommand::GetInputParametersSchema () co
                         "centerOffset": { "type": "number", "minimum": 0.0 },
                         "sillHeight": { "type": "number" },
                         "width": { "type": "number", "exclusiveMinimum": 0.0 },
-                        "height": { "type": "number", "exclusiveMinimum": 0.0 }
+                        "height": { "type": "number", "exclusiveMinimum": 0.0 },
+                        "reflected": { "type": "boolean" },
+                        "refSide": { "type": "boolean" }
                     },
                     "additionalProperties": false,
                     "required": ["ownerWallId", "centerOffset"]
@@ -1593,6 +1668,14 @@ GS::ObjectState CreateWindowsCommand::Execute (const GS::ObjectState& parameters
             if (height.HasValue ()) {
                 element.window.openingBase.height = height.Get ();
             }
+            bool reflected = false;
+            if (data.Get ("reflected", reflected)) {
+                element.window.openingBase.reflected = reflected;
+            }
+            bool refside = false;
+            if (data.Get ("refSide", refside)) {
+                element.window.openingBase.refSide = refside;
+            }
 
             err = ACAPI_Element_CreateExt (&element, &memo, 1UL, &marker);
             if (err != NoError) {
@@ -1628,7 +1711,9 @@ GS::Optional<GS::UniString> CreateDoorsCommand::GetInputParametersSchema () cons
                         "centerOffset": { "type": "number", "minimum": 0.0 },
                         "sillHeight": { "type": "number" },
                         "width": { "type": "number", "exclusiveMinimum": 0.0 },
-                        "height": { "type": "number", "exclusiveMinimum": 0.0 }
+                        "height": { "type": "number", "exclusiveMinimum": 0.0 },
+                        "reflected": { "type": "boolean" },
+                        "refSide": { "type": "boolean" }
                     },
                     "additionalProperties": false,
                     "required": ["ownerWallId", "centerOffset"]
@@ -1699,6 +1784,14 @@ GS::ObjectState CreateDoorsCommand::Execute (const GS::ObjectState& parameters, 
             auto height = GetOptionalDouble (data, "height");
             if (height.HasValue ()) {
                 element.window.openingBase.height = height.Get ();
+            }
+            bool reflected = false;
+            if (data.Get ("reflected", reflected)) {
+                element.window.openingBase.reflected = reflected;
+            }
+            bool refside = false;
+            if (data.Get ("refSide", refside)) {
+                element.window.openingBase.refSide = refside;
             }
 
             err = ACAPI_Element_CreateExt (&element, &memo, 1UL, &marker);
@@ -2530,6 +2623,10 @@ GS::Optional<GS::UniString> ModifyWallsCommand::GetInputParametersSchema () cons
                         "thickness": { "type": "number", "exclusiveMinimum": 0.0 },
                         "bottomOffset": { "type": "number" },
                         "offset": { "type": "number" },
+                        "referenceLineLocation": {
+                            "type": "string",
+                            "enum": ["Outside", "Center", "Inside", "CoreOutside", "CoreCenter", "CoreInside"]
+                        },
                         "structureType": {
                             "type": "string",
                             "enum": ["Basic", "Composite", "Profile"]
@@ -2617,7 +2714,11 @@ GS::Optional<GS::UniString> ModifyBeamsCommand::GetInputParametersSchema () cons
                         "offset": { "type": "number" },
                         "slantAngle": { "type": "number" },
                         "arcAngle": { "type": "number" },
-                        "verticalCurveHeight": { "type": "number" }
+                        "verticalCurveHeight": { "type": "number" },
+                        "anchorPoint": {
+                            "type": "string",
+                            "enum": ["TopLeft", "TopCenter", "TopRight", "MiddleLeft", "Center", "MiddleRight", "BottomLeft", "BottomCenter", "BottomRight"]
+                        }
                     },
                     "additionalProperties": false,
                     "required": ["elementId"]
@@ -2689,6 +2790,10 @@ GS::Optional<GS::UniString> ModifySlabsCommand::GetInputParametersSchema () cons
                         "elementId": { "$ref": "#/ElementId" },
                         "zCoordinate": { "type": "number" },
                         "thickness": { "type": "number", "exclusiveMinimum": 0.0 },
+                        "referencePlaneLocation": {
+                            "type": "string",
+                            "enum": ["Top", "CoreTop", "CoreBottom", "Bottom"]
+                        },
                         "structureType": {
                             "type": "string",
                             "enum": ["Basic", "Composite"]
@@ -2957,7 +3062,11 @@ GS::Optional<GS::UniString> ModifyColumnsCommand::GetInputParametersSchema () co
                         "zCoordinate": { "type": "number" },
                         "height": { "type": "number", "exclusiveMinimum": 0.0 },
                         "bottomOffset": { "type": "number" },
-                        "axisRotationAngle": { "type": "number" }
+                        "axisRotationAngle": { "type": "number" },
+                        "coreAnchor": {
+                            "type": "string",
+                            "enum": ["TopLeft", "TopCenter", "TopRight", "MiddleLeft", "Center", "MiddleRight", "BottomLeft", "BottomCenter", "BottomRight"]
+                        }
                     },
                     "additionalProperties": false,
                     "required": ["elementId"]
@@ -3032,7 +3141,9 @@ GS::Optional<GS::UniString> ModifyWindowsCommand::GetInputParametersSchema () co
                         "width": { "type": "number", "exclusiveMinimum": 0.0 },
                         "height": { "type": "number", "exclusiveMinimum": 0.0 },
                         "sillHeight": { "type": "number" },
-                        "centerOffset": { "type": "number", "minimum": 0.0 }
+                        "centerOffset": { "type": "number", "minimum": 0.0 },
+                        "reflected": { "type": "boolean" },
+                        "refSide": { "type": "boolean" }
                     },
                     "additionalProperties": false,
                     "required": ["elementId"]
@@ -3105,7 +3216,9 @@ GS::Optional<GS::UniString> ModifyDoorsCommand::GetInputParametersSchema () cons
                         "width": { "type": "number", "exclusiveMinimum": 0.0 },
                         "height": { "type": "number", "exclusiveMinimum": 0.0 },
                         "sillHeight": { "type": "number" },
-                        "centerOffset": { "type": "number", "minimum": 0.0 }
+                        "centerOffset": { "type": "number", "minimum": 0.0 },
+                        "reflected": { "type": "boolean" },
+                        "refSide": { "type": "boolean" }
                     },
                     "additionalProperties": false,
                     "required": ["elementId"]
@@ -3263,4 +3376,415 @@ GS::ObjectState ModifyMorphsCommand::Execute (const GS::ObjectState& parameters,
             results.Push (err == NoError ? CreateSuccessfulExecutionResult () : CreateFailedExecutionResult (err, "Failed to modify morph."));
         }
     });
+}
+
+// =============================================================================
+// GetWindowsDetails / GetDoorsDetails
+// =============================================================================
+
+static GS::UniString FixPointToString (short fixPoint)
+{
+    switch (fixPoint) {
+        case APIHoleAnchor_BegFix:    return "BegFix";
+        case APIHoleAnchor_CenterFix: return "Center";
+        case APIHoleAnchor_EndFix:    return "EndFix";
+        default:                      return "Unknown";
+    }
+}
+
+static GS::UniString VerticalLinkTypeToString (API_VerticalLinkID linkType)
+{
+    switch (linkType) {
+        case API_NoLink:                   return "NoLink";
+        case API_LinkSillToWallBottom:     return "SillToWallBottom";
+        case API_LinkSillToStory:          return "SillToStory";
+        case API_LinkHeaderToWallBottom:   return "HeaderToWallBottom";
+        case API_LinkHeaderToStory:        return "HeaderToStory";
+        case API_LinkSkylightToRoofPivot:  return "SkylightToRoofPivot";
+        case API_LinkSkylightToStory:      return "SkylightToStory";
+        case API_LinkSkylightToShellBase:  return "SkylightToShellBase";
+        case API_LinkSillToWallTop:        return "SillToWallTop";
+        case API_LinkHeaderToWallTop:      return "HeaderToWallTop";
+        default:                           return "Unknown";
+    }
+}
+
+static GS::UniString DirectionTypeToString (API_WindowDoorDirectionTypes dirType)
+{
+    switch (dirType) {
+        case API_WDAssociativeToWall: return "AssociativeToWall";
+        case API_WDVertical:          return "Vertical";
+        default:                      return "Unknown";
+    }
+}
+
+static GS::UniString RevealDepthLocationToString (API_WindowDoorRevealDepthLocationID loc)
+{
+    switch (loc) {
+        case APIWDRevealDepth_Side: return "Side";
+        case APIWDRevealDepth_Core: return "Core";
+        default:                    return "Unknown";
+    }
+}
+
+static void AddWindowOrDoorDetails (GS::ObjectState& details, const API_Element& element)
+{
+    details.Add ("width", element.window.openingBase.width);
+    details.Add ("height", element.window.openingBase.height);
+    details.Add ("sillHeight", element.window.lower);
+    details.Add ("centerOffset", element.window.objLoc);
+
+    details.Add ("reflected", element.window.openingBase.reflected);
+    details.Add ("oSide", element.window.openingBase.oSide);
+    details.Add ("refSide", element.window.openingBase.refSide);
+    details.Add ("wallCutUsing", element.window.openingBase.wallCutUsing);
+
+    details.Add ("fixPoint", FixPointToString (element.window.fixPoint));
+    details.Add ("ownerId", CreateGuidObjectState (element.window.owner));
+    details.Add ("startPoint", Create2DCoordinateObjectState (element.window.startPoint));
+    details.Add ("dirVector", Create2DCoordinateObjectState (element.window.dirVector));
+    details.Add ("directionType", DirectionTypeToString (element.window.directionType));
+
+    details.Add ("revealDepthLocation", RevealDepthLocationToString (element.window.revealDepthLocation));
+    details.Add ("revealDepthOffset", element.window.revealDepthOffset);
+    details.Add ("revealDepthFromSide", element.window.revealDepthFromSide);
+    details.Add ("jambDepthHead", element.window.jambDepthHead);
+    details.Add ("jambDepthSill", element.window.jambDepthSill);
+    details.Add ("jambDepth", element.window.jambDepth);
+    details.Add ("jambDepth2", element.window.jambDepth2);
+    details.Add ("reveal", element.window.reveal);
+
+    details.Add ("verticalLinkType", VerticalLinkTypeToString (element.window.openingBase.verticalLink.linkType));
+    details.Add ("verticalLinkValue", static_cast<int> (element.window.openingBase.verticalLink.linkValue));
+
+    API_LibPart lp = {};
+    lp.index = element.window.openingBase.libInd;
+    if (ACAPI_LibraryPart_Get (&lp) == NoError) {
+        details.Add ("libraryPartName", GS::UniString (lp.docu_UName));
+    }
+}
+
+static GS::UniString GetWindowOrDoorElementsInputSchema ()
+{
+    return R"({
+        "type": "object",
+        "properties": {
+            "elements": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "elementId": { "$ref": "#/ElementId" }
+                    },
+                    "additionalProperties": false,
+                    "required": ["elementId"]
+                }
+            }
+        },
+        "additionalProperties": false,
+        "required": ["elements"]
+    })";
+}
+
+static GS::UniString GetWindowOrDoorDetailsResponseSchema ()
+{
+    return R"({
+        "type": "object",
+        "properties": {
+            "details": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "elementId": { "$ref": "#/ElementId" },
+                        "type": { "type": "string" },
+                        "floorIndex": { "type": "integer" },
+                        "ownerId": { "$ref": "#/ElementId" },
+                        "width": { "type": "number" },
+                        "height": { "type": "number" },
+                        "sillHeight": { "type": "number" },
+                        "centerOffset": { "type": "number" },
+                        "reflected": { "type": "boolean" },
+                        "oSide": { "type": "boolean" },
+                        "refSide": { "type": "boolean" },
+                        "wallCutUsing": { "type": "boolean" },
+                        "fixPoint": { "type": "string" },
+                        "revealDepthLocation": { "type": "string" },
+                        "revealDepthOffset": { "type": "number" },
+                        "revealDepthFromSide": { "type": "number" },
+                        "jambDepthHead": { "type": "number" },
+                        "jambDepthSill": { "type": "number" },
+                        "jambDepth": { "type": "number" },
+                        "jambDepth2": { "type": "number" },
+                        "reveal": { "type": "boolean" },
+                        "verticalLinkType": { "type": "string" },
+                        "verticalLinkValue": { "type": "integer" },
+                        "startPoint": {
+                            "type": "object",
+                            "properties": {
+                                "x": { "type": "number" },
+                                "y": { "type": "number" }
+                            }
+                        },
+                        "dirVector": {
+                            "type": "object",
+                            "properties": {
+                                "x": { "type": "number" },
+                                "y": { "type": "number" }
+                            }
+                        },
+                        "directionType": { "type": "string" },
+                        "libraryPartName": { "type": "string" }
+                    }
+                }
+            }
+        },
+        "additionalProperties": false,
+        "required": ["details"]
+    })";
+}
+
+static GS::ObjectState ExecuteGetWindowOrDoorDetails (const GS::ObjectState& parameters, API_ElemTypeID expectedTypeID, const char* typeName)
+{
+    GS::Array<GS::ObjectState> elements;
+    parameters.Get ("elements", elements);
+
+    GS::ObjectState response;
+    const auto& detailsList = response.AddList<GS::ObjectState> ("details");
+
+    for (const GS::ObjectState& elementOs : elements) {
+        const GS::ObjectState* elementId = elementOs.Get ("elementId");
+        if (elementId == nullptr) {
+            detailsList (CreateErrorResponse (APIERR_BADPARS, "elementId is missing"));
+            continue;
+        }
+
+        API_Element element = {};
+        element.header.guid = GetGuidFromObjectState (*elementId);
+        GSErrCode err = ACAPI_Element_Get (&element);
+
+        if (err != NoError) {
+            detailsList (CreateErrorResponse (err, GS::UniString::Printf ("Failed to get element. Error code: %d", static_cast<int> (err))));
+            continue;
+        }
+
+        const API_ElemTypeID typeID = GetElemTypeId (element.header);
+        if (typeID != expectedTypeID) {
+            detailsList (CreateErrorResponse (APIERR_BADPARS, GS::UniString::Printf ("Element is not a %s.", typeName)));
+            continue;
+        }
+
+        GS::ObjectState details;
+        details.Add ("elementId", CreateGuidObjectState (element.header.guid));
+        details.Add ("type", GS::UniString (typeName));
+        details.Add ("floorIndex", element.header.floorInd);
+
+        AddWindowOrDoorDetails (details, element);
+
+        detailsList (details);
+    }
+
+    return response;
+}
+
+// --- GetWindowsDetailsCommand ------------------------------------------------
+
+GetWindowsDetailsCommand::GetWindowsDetailsCommand () :
+    CommandBase (CommonSchema::Used)
+{
+}
+
+GS::String GetWindowsDetailsCommand::GetName () const
+{
+    return "GetWindowsDetails";
+}
+
+GS::Optional<GS::UniString> GetWindowsDetailsCommand::GetInputParametersSchema () const
+{
+    return GetWindowOrDoorElementsInputSchema ();
+}
+
+GS::Optional<GS::UniString> GetWindowsDetailsCommand::GetResponseSchema () const
+{
+    return GetWindowOrDoorDetailsResponseSchema ();
+}
+
+GS::ObjectState GetWindowsDetailsCommand::Execute (const GS::ObjectState& parameters, GS::ProcessControl&) const
+{
+    return ExecuteGetWindowOrDoorDetails (parameters, API_WindowID, "Window");
+}
+
+// --- GetDoorsDetailsCommand --------------------------------------------------
+
+GetDoorsDetailsCommand::GetDoorsDetailsCommand () :
+    CommandBase (CommonSchema::Used)
+{
+}
+
+GS::String GetDoorsDetailsCommand::GetName () const
+{
+    return "GetDoorsDetails";
+}
+
+GS::Optional<GS::UniString> GetDoorsDetailsCommand::GetInputParametersSchema () const
+{
+    return GetWindowOrDoorElementsInputSchema ();
+}
+
+GS::Optional<GS::UniString> GetDoorsDetailsCommand::GetResponseSchema () const
+{
+    return GetWindowOrDoorDetailsResponseSchema ();
+}
+
+GS::ObjectState GetDoorsDetailsCommand::Execute (const GS::ObjectState& parameters, GS::ProcessControl&) const
+{
+    return ExecuteGetWindowOrDoorDetails (parameters, API_DoorID, "Door");
+}
+
+// --- GetDimensionDataCommand -------------------------------------------------
+
+static GS::UniString WitnessFormToString (API_WitnessID witnessForm)
+{
+    switch (witnessForm) {
+        case APIWtn_None:  return "None";
+        case APIWtn_Small: return "Small";
+        case APIWtn_Large: return "Large";
+        case APIWtn_Fix:   return "Fix";
+        default:           return "Unknown";
+    }
+}
+
+GetDimensionDataCommand::GetDimensionDataCommand () :
+    CommandBase (CommonSchema::Used)
+{
+}
+
+GS::String GetDimensionDataCommand::GetName () const
+{
+    return "GetDimensionData";
+}
+
+GS::Optional<GS::UniString> GetDimensionDataCommand::GetInputParametersSchema () const
+{
+    return R"({
+        "type": "object",
+        "properties": {
+            "elements": {
+                "type": "array",
+                "description": "A list of dimension elements.",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "elementId": { "$ref": "#/ElementId" }
+                    },
+                    "additionalProperties": false,
+                    "required": ["elementId"]
+                }
+            }
+        },
+        "additionalProperties": false,
+        "required": ["elements"]
+    })";
+}
+
+GS::Optional<GS::UniString> GetDimensionDataCommand::GetResponseSchema () const
+{
+    return R"({
+        "type": "object",
+        "properties": {
+            "dimensionsData": {
+                "type": "array",
+                "items": {
+                    "$ref": "#/DimensionDataOrError"
+                }
+            }
+        },
+        "additionalProperties": false,
+        "required": ["dimensionsData"]
+    })";
+}
+
+GS::ObjectState GetDimensionDataCommand::Execute (const GS::ObjectState& parameters, GS::ProcessControl&) const
+{
+    GS::Array<GS::ObjectState> elements;
+    parameters.Get ("elements", elements);
+
+    GS::ObjectState response;
+    const auto& dimensionsDataList = response.AddList<GS::ObjectState> ("dimensionsData");
+
+    for (const GS::ObjectState& elementOs : elements) {
+        const GS::ObjectState* elementId = elementOs.Get ("elementId");
+        if (elementId == nullptr) {
+            GS::ObjectState errorData;
+            errorData.Add ("error", GS::UniString ("elementId is missing"));
+            dimensionsDataList (errorData);
+            continue;
+        }
+
+        API_Element element = {};
+        element.header.guid = GetGuidFromObjectState (*elementId);
+        GSErrCode err = ACAPI_Element_Get (&element);
+
+        if (err != NoError) {
+            GS::ObjectState errorData;
+            errorData.Add ("elementId", CreateGuidObjectState (element.header.guid));
+            errorData.Add ("error", GS::UniString::Printf ("Failed to get element. Error code: %d", static_cast<int> (err)));
+            dimensionsDataList (errorData);
+            continue;
+        }
+
+        const API_ElemTypeID typeID = GetElemTypeId (element.header);
+        if (typeID != API_DimensionID) {
+            GS::ObjectState errorData;
+            errorData.Add ("elementId", CreateGuidObjectState (element.header.guid));
+            errorData.Add ("error", GS::UniString ("Element is not a Dimension."));
+            dimensionsDataList (errorData);
+            continue;
+        }
+
+        API_ElementMemo memo = {};
+        const GS::OnExit cleanup ([&]() {
+            ACAPI_DisposeElemMemoHdls (&memo);
+        });
+
+        err = ACAPI_Element_GetMemo (element.header.guid, &memo);
+        if (err != NoError) {
+            GS::ObjectState errorData;
+            errorData.Add ("elementId", CreateGuidObjectState (element.header.guid));
+            errorData.Add ("error", GS::UniString::Printf ("Failed to get element memo. Error code: %d", static_cast<int> (err)));
+            dimensionsDataList (errorData);
+            continue;
+        }
+
+        GS::ObjectState dimData;
+        dimData.Add ("elementId", CreateGuidObjectState (element.header.guid));
+        dimData.Add ("direction", Create2DCoordinateObjectState (element.dimension.direction));
+        dimData.Add ("dimensionLinePosition", Create2DCoordinateObjectState (element.dimension.refC));
+
+        if (memo.dimElems != nullptr && *memo.dimElems != nullptr && element.dimension.nDimElem > 0) {
+            const auto& witnessPointsList = dimData.AddList<GS::ObjectState> ("witnessPoints");
+
+            for (Int32 i = 0; i < element.dimension.nDimElem; ++i) {
+                const API_DimElem& dimElem = (*memo.dimElems)[i];
+
+                GS::ObjectState wp;
+                wp.Add ("coordinate", Create2DCoordinateObjectState (dimElem.base.loc));
+                wp.Add ("coordinate3D", Create3DCoordinateObjectState (dimElem.base.loc3D));
+                wp.Add ("dimensionPosition", Create2DCoordinateObjectState (dimElem.pos));
+                wp.Add ("dimensionValue", dimElem.dimVal);
+                wp.Add ("witnessForm", WitnessFormToString (dimElem.witnessForm));
+                wp.Add ("witnessVal", dimElem.witnessVal);
+
+                if (dimElem.base.base.guid != APINULLGuid) {
+                    wp.Add ("baseElementId", CreateGuidObjectState (dimElem.base.base.guid));
+                }
+
+                witnessPointsList (wp);
+            }
+        }
+
+        dimensionsDataList (dimData);
+    }
+
+    return response;
 }
